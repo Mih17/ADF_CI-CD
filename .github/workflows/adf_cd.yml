@@ -1,0 +1,31 @@
+on:
+  push:
+    branches:
+    - adf_publish
+jobs:
+  deploy_Stage_testing:
+    runs-on: ubuntu-latest
+    name: Test environment
+    steps:
+    - uses: actions/checkout@v2
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_SP }}
+    - uses: actions/checkout@v2
+      with:
+        repository: git://Data Engineering/cpo-configs@ref/heads/main
+    - name: Stop ADF triggers
+      uses: azure/powershell@v1
+      with:
+        inlineScript: ${{ github.workspace }}/cpo-configs/cicd-configs/adf-maintenance.ps1 -armTemplate "${{ github.workspace }}/cpo-datafactory/cpo-adf-dev/ARMTemplateForFactory.json" -ResourceGroupName "cpo-adf" -DataFactoryName "cpo-adf-uat" -predeployment $true -deleteDeployment $false
+        azPSVersion: latest
+    - name: ARM Template deployment
+      uses: Azure/cli@v1.0.0
+      with:
+        inlineScript: az deployment group create --resource-group cpo-adf --template-file ${{ github.workspace }}/cpo-datafactory/cpo-adf-dev/ARMTemplateForFactory.json --parameters  ${{ github.workspace }}/cpo-datafactory/cpo-adf-dev/ARMTemplateParametersForFactory.json -factoryName "cpo-adf-uat" -LS_MSQL_ReportingDB_connectionString "" -LS_ASQL_MetadataDB_properties_typeProperties_connectionString_secretName "k-conn-asql-metadatadb-metadatauser" -dataFactory_location "westeurope"
+    - name: Clean resources and start ADF triggers
+      uses: azure/powershell@v1
+      with:
+        inlineScript: ${{ github.workspace }}/cpo-configs/cicd-configs/adf-maintenance.ps1 -armTemplate "${{ github.workspace }}/cpo-datafactory/cpo-adf-dev/ARMTemplateForFactory.json" -ResourceGroupName "cpo-adf" -DataFactoryName "cpo-adf-dev" -predeployment $false -deleteDeployment $true
+        azPSVersion: latest
